@@ -2,6 +2,7 @@ import cv2
 import numpy as np
 import time
 import os
+from collections import Counter
 
 
 def detect_objects(frame, net, out_layers, classes_to_look_for):
@@ -33,9 +34,16 @@ def detect_objects(frame, net, out_layers, classes_to_look_for):
                 boxes.append([x, y, w, h])
                 class_ids.append(class_id)
 
-    indices = cv2.dnn.NMSBoxes(boxes, confidences, score_threshold=0.5, nms_threshold=0.5)
+    indices = cv2.dnn.NMSBoxes(boxes, confidences, score_threshold=0.4, nms_threshold=0.5)
+    
+    if isinstance(indices, tuple) and not indices:
+         indices = []
+    elif isinstance(indices, np.ndarray):
+        indices = indices.astype(int)
+        indices = indices.reshape(-1, 1).tolist()
+    else:
+        raise ValueError(f"Unexpected value in 'indices': {indices}")
 
-    detected_objects = []
     for i in indices:
         i = i[0]
         x, y, w, h = boxes[i]
@@ -43,11 +51,9 @@ def detect_objects(frame, net, out_layers, classes_to_look_for):
         detected_objects.append(label)
         confidence = round(confidences[i], 2)
         cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
-        cv2.putText(frame, f'{label} {confidence}', (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-        
+        cv2.putText(frame, f'{label} {confidence}', (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)  
     return frame, detected_objects
-
-yolo_config = "/Users/kakotichi/Documents/GitHub/sf_data_science/Vacation/yolov3-tiny.cfg"
+yolo_config = "/Users/kakotichi/Documents/GitHub/sf_data_science/Vacation/yolov3.cfg"
 yolo_weights = "/Users/kakotichi/Documents/GitHub/sf_data_science/Vacation/yolov3.weights"
 net = cv2.dnn.readNet(yolo_weights, yolo_config)
 
@@ -62,7 +68,7 @@ out_layers = [layer_names[i - 1] for i in output_layers_indices]
 
 classes_to_look_for = ["person", "cell phone", "laptop", "tv", "remote"]
 
-video_path = "/Users/kakotichi/Downloads/train_dataset_Бригады/Анализ бригад (телефон)/Есть телефон/02_59_18.mp4"
+video_path = "/Users/kakotichi/Downloads/train_dataset_Бригады/Анализ бригад (телефон)/Есть телефон/00_26_30.mp4"
 cap = cv2.VideoCapture(video_path)
 
 frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -79,7 +85,7 @@ with open(class_file, 'r') as f:
 output_folder = "/Users/kakotichi/Documents/GitHub/sf_data_science/Vacation/result"
 if not os.path.exists(output_folder):
     os.makedirs(output_folder)
-output_video_path = os.path.join(output_folder, '00_13_48.mp4')
+output_video_path = os.path.join(output_folder, 'результат.mp4')
 
 out = cv2.VideoWriter(output_video_path, fourcc, 20.0, (frame_width,frame_height))
 
@@ -87,28 +93,34 @@ phone_in_hands = False
 phone_detection_timer = None
 phone_hold_time = 3.0
 
+events = []  # список для сохранения всех событий
+
 while cap.isOpened():
     ret, frame = cap.read()
 
     if ret:
         processed_frame, detected_objects = detect_objects(frame, net, out_layers, classes_to_look_for)
+        detected_objects_count = Counter(detected_objects)
 
-        if 'cell phone' in detected_objects:
+        detected_phone_count = detected_objects_count.get('cell phone', 0)
+        detected_person_count = detected_objects_count.get('person', 0)
+
+        if detected_phone_count > 0:
             if not phone_in_hands:
                 phone_detection_timer = time.time()
             phone_in_hands = True
         else:
             phone_in_hands = False
-
-        person_in_cabin = 'person' in detected_objects
-
-        if person_in_cabin:
+        
+        if detected_person_count >= 2:
             if phone_in_hands and (time.time() - phone_detection_timer) >= phone_hold_time:
-                print("Телефон был в руках более 3-х секунд.")
-                # Вставьте ваш код здесь, если хотите предпринять дополнительные действия после 3-х секунд
-        else:
-            print("Никого нет в кабине.")
-
+                event_msg = f"Телефон(ы) был(и) в руках двух человек более {phone_hold_time} секунд."
+                events.append(event_msg)
+        elif detected_person_count == 1:
+            if phone_in_hands and (time.time() - phone_detection_timer) >= phone_hold_time:
+                event_msg = "Телефон был в руках одного человека более 3-х секунд."
+                events.append(event_msg)
+       
         cv2.imshow('Detected Objects', processed_frame)
         out.write(processed_frame)
 
@@ -120,3 +132,8 @@ while cap.isOpened():
 cap.release()
 out.release()
 cv2.destroyAllWindows()
+
+# Вывод всех событий после завершения обработки видео
+print("\nОбработка видео завершена. Обнаруженные события:")
+for idx, event in enumerate(events, start=1):
+    print(f"{idx}. {event}")
