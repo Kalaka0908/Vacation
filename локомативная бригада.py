@@ -3,9 +3,11 @@ import numpy as np
 import time
 import os
 from collections import Counter
-
+import logging
+import tkinter as tk
 
 def detect_objects(frame, net, out_layers, classes_to_look_for):
+    detected_objects = []
     height, width, channels = frame.shape
     blob = cv2.dnn.blobFromImage(frame, scalefactor=1/255, size=(416, 416), mean=(0, 0, 0), swapRB=True, crop=False)
     net.setInput(blob)
@@ -53,11 +55,11 @@ def detect_objects(frame, net, out_layers, classes_to_look_for):
         cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
         cv2.putText(frame, f'{label} {confidence}', (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)  
     return frame, detected_objects
-yolo_config = "/Users/kakotichi/Documents/GitHub/sf_data_science/Vacation/yolov3.cfg"
-yolo_weights = "/Users/kakotichi/Documents/GitHub/sf_data_science/Vacation/yolov3.weights"
+yolo_config = "/Users/kakotichi/Documents/GitHub/sf_data_science/Vacation/модель/yolov3.cfg"
+yolo_weights = "/Users/kakotichi/Documents/GitHub/sf_data_science/Vacation/модель/yolov3.weights"
 net = cv2.dnn.readNet(yolo_weights, yolo_config)
 
-class_file = "/Users/kakotichi/Documents/GitHub/sf_data_science/Vacation/coco.txt"
+class_file = "/Users/kakotichi/Documents/GitHub/sf_data_science/Vacation/data/coco.txt"
 with open(class_file, 'r') as f:
     classes = [line.strip() for line in f.readlines()]
 
@@ -67,8 +69,13 @@ output_layers_indices = np.reshape(output_layers_indices, (output_layers_indices
 out_layers = [layer_names[i - 1] for i in output_layers_indices]
 
 classes_to_look_for = ["person", "cell phone", "laptop", "tv", "remote"]
+# Настройка логирования
+logging.basicConfig(filename='results.log', level=logging.INFO)
 
-video_path = "/Users/kakotichi/Downloads/train_dataset_Бригады/Анализ бригад (телефон)/Есть телефон/00_26_30.mp4"
+def load_video():
+    return "/Users/kakotichi/Downloads/train_dataset_Бригады/Анализ бригад (телефон)/Есть телефон/02_07_39.mp4"
+
+video_path = load_video()  # video_path теперь определён до его первого использования
 cap = cv2.VideoCapture(video_path)
 
 frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -77,7 +84,7 @@ frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 fourcc = cv2.VideoWriter_fourcc(*'mp4v')
 
 
-class_file = "/Users/kakotichi/Documents/GitHub/sf_data_science/Vacation/coco.txt"
+class_file = "/Users/kakotichi/Documents/GitHub/sf_data_science/Vacation/data/coco.txt"
 with open(class_file, 'r') as f:
     classes = [line.strip() for line in f.readlines()]
 
@@ -108,10 +115,14 @@ while cap.isOpened():
         if detected_phone_count > 0:
             if not phone_in_hands:
                 phone_detection_timer = time.time()
+                logging.info('Обнаружено событие: начало использования телефона')
             phone_in_hands = True
         else:
+            if phone_in_hands:
+                 logging.info('Обнаружено событие: окончание использования телефона')
             phone_in_hands = False
-        
+
+
         if detected_person_count >= 2:
             if phone_in_hands and (time.time() - phone_detection_timer) >= phone_hold_time:
                 event_msg = f"Телефон(ы) был(и) в руках двух человек более {phone_hold_time} секунд."
@@ -133,7 +144,7 @@ cap.release()
 out.release()
 cv2.destroyAllWindows()
 
-# Вывод всех событий после завершения обработки видео
 print("\nОбработка видео завершена. Обнаруженные события:")
 for idx, event in enumerate(events, start=1):
+    logging.info(f"Обнаружено событие {idx}: {event}")
     print(f"{idx}. {event}")
