@@ -53,4 +53,4 @@
 - Загружаем проект на GitHub.
 
 
-
+с отзывом о моей работе можно ознакомиться тут https://docs.google.com/document/d/1MEhERaT6zvM3jq7eu30pv4Ho00X08yozI52NckPUIqE/edit
